@@ -8,4 +8,5 @@ Install the following packages:
 ```
 pip install numpy
 pip install opencv-python
+pip install customtkinter
 ```

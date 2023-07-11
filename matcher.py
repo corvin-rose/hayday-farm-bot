@@ -28,6 +28,8 @@ class Matcher:
 
     def match_template_exists(self, template, target, matching_threshold=0.45):
         result = cv2.matchTemplate(target, template, cv2.TM_CCOEFF_NORMED)
+        if len(result) == 0:
+            return False
         _, max_val, _, max_loc = cv2.minMaxLoc(result)
         return max_val > matching_threshold
 

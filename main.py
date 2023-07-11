@@ -14,9 +14,13 @@ pa.PAUSE = 0
 FIELD_MATCHING_THRESHOLD = 0.7
 HARVEST_MATCHING_THRESHOLD = 0.8
 WHEAT_MATCHING_THRESHOLD = 0.3
+WHEAT_GROWING_MATCHING_THRESHOLD = 0.7
 BOAT_MATCHING_THRESHOLD = 0.7
 MARKET_MATCHING_THRESHOLD = 0.5
+SOLD_MATCHING_THRESHOLD = 0.6
+NEW_OFFER_MATCHING_THRESHOLD = 0.9
 SILO_MATCHING_THRESHOLD = 0.9
+CLOSE_MATCHING_THRESHOLD = 0.4
 
 BOAT_ANCHOR = (1075, 285)
 MARKET_ANCHOR = (825, 1150)
@@ -29,13 +33,22 @@ screen_dim = {
     'height': 1080
 }
 plant_img = cv2.imread('templates/plants/wheat.png', cv2.IMREAD_UNCHANGED)
+plant_growing_img = cv2.imread('templates/plants/wheat_growing.png', cv2.IMREAD_UNCHANGED)
 planting_interface_img = cv2.imread('templates/interface/planting_wheat.png', cv2.IMREAD_UNCHANGED)
 field_img = cv2.imread('templates/environment/field.png', cv2.IMREAD_UNCHANGED)
 harvesting_interface_img = cv2.imread('templates/interface/harvest_scythe.png', cv2.IMREAD_UNCHANGED)
 boat_img = cv2.imread('templates/environment/boat.png', cv2.IMREAD_UNCHANGED)
 market_img = cv2.imread('templates/environment/market.png', cv2.IMREAD_UNCHANGED)
+sold_img = cv2.imread('templates/interface/sold.png', cv2.IMREAD_UNCHANGED)
+new_offer_img = cv2.imread('templates/interface/new_offer.png', cv2.IMREAD_UNCHANGED)
 silo_img = cv2.imread('templates/interface/silo.png', cv2.IMREAD_UNCHANGED)
+close_img = cv2.imread('templates/interface/close.png', cv2.IMREAD_UNCHANGED)
 
+
+
+silo_is_full = False
+harvested_plants = False
+planted_crops = 0
 
 def get_target():
     return np.array(sct.grab(screen_dim))
@@ -61,6 +74,10 @@ def get_camera_pos():
 
 def check_fields_are_empty(target):
     return m.match_template_exists(field_img, target, FIELD_MATCHING_THRESHOLD)
+
+
+def check_plants_are_growing(target):
+    return m.match_template_exists(plant_growing_img, target, WHEAT_GROWING_MATCHING_THRESHOLD)
 
 
 def check_silo_is_full(target):
@@ -102,6 +119,10 @@ def translate_path(path, translation):
 
 
 def plant_crops(target):
+    if m.match_template_exists(plant_img, target, WHEAT_MATCHING_THRESHOLD):
+        print("Found already grown plants. Harvesting them first...")
+        return
+
     cx1, cy1 = get_camera_pos()
     empty_fields = m.match_template(field_img, target, FIELD_MATCHING_THRESHOLD)
     if len(empty_fields) == 0:
@@ -128,6 +149,10 @@ def plant_crops(target):
 
 
 def harvest_plants(target):
+    if check_plants_are_growing(target):
+        print("Found some plants, that are not fully grown. Waiting...")
+        return
+
     cx1, cy1 = get_camera_pos()
     grown_plants = m.match_template(plant_img, target, WHEAT_MATCHING_THRESHOLD)
     if len(grown_plants) == 0:
@@ -151,6 +176,36 @@ def harvest_plants(target):
 
     drag_start = (harvesting_interface[0][0], harvesting_interface[0][1])
     drag_operation(drag_start, path)
+
+    global harvested_plants
+    harvested_plants = True
+
+
+def sell_items(target):
+    print("Selling items...")
+    # Open market
+    market = m.match_template(market_img, target, MARKET_MATCHING_THRESHOLD)
+    if len(market) == 0:
+        print("Market not found...")
+        return
+    sleep(0.2)
+    pa.click(market[0][0], market[0][1])
+    sleep(1.0)
+
+    # Collect coins
+    sold = m.match_template(sold_img, target, SOLD_MATCHING_THRESHOLD)
+    print(len(sold))
+    for s in sold:
+        sleep(0.2)
+        pa.click(s[0], s[1])
+
+
+def check_unexpected_behaviour(target):
+    close = m.match_template(close_img, target, CLOSE_MATCHING_THRESHOLD)
+    if len(close) > 0:
+        print("Detected unexpected behaviour. Closing window...")
+        sleep(0.2)
+        pa.click(close[0][0], close[0][1])
 
 
 # Start of Program
@@ -177,21 +232,35 @@ while True:
     if len(empty_fields) > 0:
         print("Found %d empty fields... starting planting" % (len(empty_fields)))
         plant_crops(screen)
+        planted_crops += len(empty_fields)
 
     grown_plants = m.match_template(plant_img, screen, WHEAT_MATCHING_THRESHOLD)
-    if len(grown_plants) > 0:
-        print("Found %d grown plants, starting harvesting..." % (len(grown_plants)))
-        harvest_plants(screen)
-    else:
-        print("No grown plants found, waiting for growing...")
-        sleep(30)
+    if not silo_is_full:
+        if len(grown_plants) > 0:
+            print("Found %d grown plants, starting harvesting..." % (len(grown_plants)))
+            harvest_plants(screen)
+        else:
+            print("No grown plants found, waiting for growing...")
+            for i in range(30):
+                if keyboard.is_pressed('q'): break
+                sleep(1.0)
 
     if check_silo_is_full(screen):
-        print("Silo is full. TODO: sell items")
+        print("Silo is full detected")
+        silo_is_full = True
         break
 
-    sleep(1.0)
+    if harvested_plants:
+        sell_items(screen)
+
+    harvested_plants = False
+
+    check_unexpected_behaviour(screen)
+
+    sleep(3.0)
     if keyboard.is_pressed('q'):
         print("Stopping...")
-        # TODO: print stats
+        print()
+        print("========= Stats =========")
+        print("Crops planted:", planted_crops)
         break
