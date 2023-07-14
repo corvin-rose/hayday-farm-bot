@@ -1,17 +1,10 @@
 import cv2
-import numpy as np
 import mss
 from matcher import Matcher
 
 sct = mss.mss()
 
-#interface_img = cv2.imread('market_interface.png', cv2.IMREAD_UNCHANGED)
-interface_img = np.array(sct.grab({
-    'left': 0,
-    'top': 0,
-    'width': 1920,
-    'height': 1080
-}))
+interface_img = cv2.imread('market_interface.png', cv2.IMREAD_UNCHANGED)
 sold_img = cv2.imread('../templates/interface/sold.png', cv2.IMREAD_UNCHANGED)
 new_offer_img = cv2.imread('../templates/interface/new_offer.png', cv2.IMREAD_UNCHANGED)
 close_img = cv2.imread('../templates/interface/close.png', cv2.IMREAD_UNCHANGED)

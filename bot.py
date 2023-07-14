@@ -15,14 +15,17 @@ HARVEST_MATCHING_THRESHOLD = 0.8
 WHEAT_MATCHING_THRESHOLD = 0.3
 WHEAT_GROWING_MATCHING_THRESHOLD = 0.7
 BOAT_MATCHING_THRESHOLD = 0.7
-MARKET_MATCHING_THRESHOLD = 0.5
+MARKET_MATCHING_THRESHOLD = 0.6
 SOLD_MATCHING_THRESHOLD = 0.6
-NEW_OFFER_MATCHING_THRESHOLD = 0.9
+NEW_OFFER_MATCHING_THRESHOLD = 0.6
+PLANT_OFFER_MATCHING_THRESHOLD = 0.9
+NEWSPAPER_MATCHING_THRESHOLD = 0.6
+INSERT_BUTTON_MATCHING_THRESHOLD = 0.9
 SILO_MATCHING_THRESHOLD = 0.9
 CLOSE_MATCHING_THRESHOLD = 0.4
 
 BOAT_ANCHOR = (1075, 285)
-MARKET_ANCHOR = (825, 1150)
+MARKET_ANCHOR = (770, 1150)
 
 plant_img = cv2.imread('templates/plants/wheat.png', cv2.IMREAD_UNCHANGED)
 plant_growing_img = cv2.imread('templates/plants/wheat_growing.png', cv2.IMREAD_UNCHANGED)
@@ -33,6 +36,9 @@ boat_img = cv2.imread('templates/environment/boat.png', cv2.IMREAD_UNCHANGED)
 market_img = cv2.imread('templates/environment/market.png', cv2.IMREAD_UNCHANGED)
 sold_img = cv2.imread('templates/interface/sold.png', cv2.IMREAD_UNCHANGED)
 new_offer_img = cv2.imread('templates/interface/new_offer.png', cv2.IMREAD_UNCHANGED)
+plant_offer_img = cv2.imread('templates/interface/wheat_market.png', cv2.IMREAD_UNCHANGED)
+newspaper_img = cv2.imread('templates/interface/newspaper.png', cv2.IMREAD_UNCHANGED)
+insert_button_img = cv2.imread('templates/interface/insert_button.png', cv2.IMREAD_UNCHANGED)
 silo_img = cv2.imread('templates/interface/silo.png', cv2.IMREAD_UNCHANGED)
 close_img = cv2.imread('templates/interface/close.png', cv2.IMREAD_UNCHANGED)
 
@@ -87,10 +93,11 @@ class Bot:
     def check_silo_is_full(self, target):
         return len(self.m.match_template(silo_img, target, SILO_MATCHING_THRESHOLD)) > 0
 
-    def drag_operation(self, drag_start, matches):
+    def drag_operation(self, drag_start, matches, target):
         pa.moveTo(drag_start[0], drag_start[1])
         boundary = self.m.matchs_to_boundary(matches)
         path = self.m.boundary_to_path(boundary)
+        self.track_path(path, target)
 
         pa.mouseDown(button='left')
         pa.moveTo(path[0][0], path[0][1], duration=0.2)
@@ -146,7 +153,7 @@ class Bot:
             return
 
         drag_start = (planting_interface[0][0], planting_interface[0][1])
-        self.drag_operation(drag_start, path)
+        self.drag_operation(drag_start, path, target)
 
     def harvest_plants(self, target):
         if self.check_plants_are_growing(target):
@@ -175,7 +182,7 @@ class Bot:
             return
 
         drag_start = (harvesting_interface[0][0], harvesting_interface[0][1])
-        self.drag_operation(drag_start, path)
+        self.drag_operation(drag_start, path, target)
         self.harvested_plants = True
 
     def sell_items(self, target):
@@ -186,15 +193,75 @@ class Bot:
             self.logger.log("Market not found...")
             return
         sleep(0.2)
-        pa.click(market[0][0], market[0][1])
+        pa.click(market[0][0] + 50, market[0][1])
         sleep(1.0)
 
         # Collect coins
+        target = self.get_target()
         sold = self.m.match_template(sold_img, target, SOLD_MATCHING_THRESHOLD)
         self.track_matches(sold, target)
+        if len(sold) > 0:
+            self.logger.log("Collecting coins...")
         for s in sold:
             sleep(0.2)
             pa.click(s[0], s[1])
+        sleep(1.0)
+
+        # Create offers
+        target = self.get_target()
+        new_offers = self.m.match_template(new_offer_img, target, NEW_OFFER_MATCHING_THRESHOLD)
+        self.track_matches(new_offers, target)
+        if len(new_offers) > 0:
+            self.logger.log("Inserting new offers...")
+        else:
+            self.logger.log("No slots for offers found!")
+        for offer in new_offers:
+            if not self.create_offer(offer):
+                break
+        sleep(1.0)
+
+        # Exit market
+        close = self.m.match_template(close_img, target, CLOSE_MATCHING_THRESHOLD)
+        if len(close) > 0:
+            self.logger.log("Finished with selling. Closing market...")
+            pa.click(close[0][0], close[0][1])
+
+    def create_offer(self, offer):
+        # Open new offer window
+        pa.click(offer[0], offer[1])
+        sleep(0.5)
+
+        # Select target plant to sell
+        target = self.get_target()
+        plant_to_sell = self.m.match_template(plant_offer_img, target, PLANT_OFFER_MATCHING_THRESHOLD)
+        self.track_matches(plant_to_sell, target)
+        if len(plant_to_sell) > 0:
+            pa.click(plant_to_sell[0][0], plant_to_sell[0][1])
+        else:
+            self.logger.log("Target plant not found... Assuming, that plants are empty")
+            keyboard.send("esc")
+            return False
+        sleep(0.5)
+
+        # Check if newspaper insert is available
+        newspaper = self.m.match_template(newspaper_img, target, NEWSPAPER_MATCHING_THRESHOLD)
+        self.track_matches(newspaper, target)
+        if len(newspaper) > 0:
+            self.logger.log("Insert to newspaper available. Inserting...")
+            pa.click(newspaper[0][0], newspaper[0][1])
+        sleep(0.2)
+
+        # Insert offer
+        target = self.get_target()
+        insert_button = self.m.match_template(insert_button_img, target, INSERT_BUTTON_MATCHING_THRESHOLD)
+        self.track_matches(insert_button, target)
+        if len(insert_button) > 0:
+            pa.click(insert_button[0][0], insert_button[0][1])
+        else:
+            self.logger.log("Insert button not found. This is a critical error, because no plants can be sold.")
+            return False
+        sleep(0.2)
+        return True
 
     def check_unexpected_behaviour(self, target):
         close = self.m.match_template(close_img, target, CLOSE_MATCHING_THRESHOLD)
@@ -208,12 +275,18 @@ class Bot:
         self.m.mark_matches(matches, tracked, (255, 0, 0))
         self.set_tracking_img(tracked)
 
+    def track_path(self, path, target):
+        tracked = target.copy()
+        self.m.mark_path(path, tracked)
+        self.set_tracking_img(tracked)
+
     def bot_loop(self):
         while True:
             screen = self.get_target()
 
             self.logger.log("Camera:", self.get_camera_pos())
 
+            # Plant
             empty_fields = self.m.match_template(field_img, screen, FIELD_MATCHING_THRESHOLD)
             self.track_matches(empty_fields, screen)
             if len(empty_fields) > 0:
@@ -221,6 +294,13 @@ class Bot:
                 self.plant_crops(screen)
                 self.planted_crops += len(empty_fields)
 
+            # Sell
+            if self.harvested_plants or self.silo_is_full:
+                self.silo_is_full = False
+                self.sell_items(screen)
+            self.harvested_plants = False
+
+            # Harvest
             grown_plants = self.m.match_template(plant_img, screen, WHEAT_MATCHING_THRESHOLD)
             self.track_matches(grown_plants, screen)
             if not self.silo_is_full:
@@ -229,21 +309,19 @@ class Bot:
                     self.harvest_plants(screen)
                 else:
                     self.logger.log("No grown plants found, waiting for growing...")
-                    for i in range(30):
+                    for i in range(10):
                         if keyboard.is_pressed('q'): break
                         sleep(1.0)
 
+            # Check Silo
+            screen = self.get_target()
             if self.check_silo_is_full(screen):
                 self.logger.log("Silo is full detected")
                 self.silo_is_full = True
-
-            if self.harvested_plants:
-                self.sell_items(screen)
-
-            self.harvested_plants = False
 
             self.check_unexpected_behaviour(screen)
 
             sleep(3.0)
             if keyboard.is_pressed('q'):
+                self.logger.log("Stopping...")
                 break

@@ -16,7 +16,7 @@ cv2.imshow('Result', boat_env_img)
 cv2.waitKey()
 
 boat_2 = m.match_template(boat_img, boat_env_2_img)
-market = m.match_template(market_img, boat_env_2_img)
+market = m.match_template(market_img, boat_env_2_img, 0.6)
 m.mark_matches(boat_2, boat_env_2_img, (255, 0, 0))
 m.mark_matches(market, boat_env_2_img, (255, 0, 0))
 
