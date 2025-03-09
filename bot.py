@@ -212,7 +212,7 @@ class Bot:
         new_offers = self.m.match_template(new_offer_img, target, NEW_OFFER_MATCHING_THRESHOLD)
         self.track_matches(new_offers, target)
         if len(new_offers) > 0:
-            self.logger.log("Inserting new offers...")
+            self.logger.log("Inserting new offers...", len(new_offers))
         else:
             self.logger.log("No slots for offers found!")
         for offer in new_offers:
